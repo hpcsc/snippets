@@ -1,0 +1,41 @@
+name: Comment
+
+on:
+  pull_request:
+
+jobs:
+  comment:
+    name: Comment
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: zendesk/github-script@v6
+        name: Create status
+        with:
+          script: |
+            const commentBody = 'A test comment';
+
+            // Mark previous comments as outdated by minimizing them.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            for (const comment of comments) {
+              if (comment.user.login === 'github-actions[bot]' && comment.body.includes(commentBody)) {
+                // https://docs.github.com/en/graphql/reference/mutations#minimizecomment
+                await github.graphql(`
+                  mutation {
+                    minimizeComment(input: {subjectId: "${comment.node_id}", classifier: OUTDATED}) {
+                      clientMutationId
+                    }
+                  }
+                `);
+              }
+            }
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            })
